@@ -23,24 +23,29 @@ uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png
 # Function to preprocess image
 def preprocess_image(image):
     image = image.resize((224, 224))  # Resize to 224x224 (MobileNetV2 input size)
-    image = np.array(image) / 255.0  # Normalize pixel values
+    image = np.array(image, dtype=np.float32) / 255.0  # Normalize pixel values and force float32
     image = np.expand_dims(image, axis=0)  # Add batch dimension
     return image
 
 # Perform classification when an image is uploaded
 if uploaded_file is not None:
     image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-
+    st.image(image, caption="Uploaded Image", use_container_width=True)
+    
     # Preprocess and classify the image
     processed_image = preprocess_image(image)
-    predictions = model(processed_image)
     
-    # Get the highest probability class
-    predicted_class = np.argmax(predictions)
-    clothing_item = imagenet_labels[predicted_class]
-
-    # Display the classification result
-    st.subheader(f"🛍️ Detected Clothing Item: **{clothing_item}**")
-    st.write("Prediction Confidence:", round(np.max(predictions) * 100, 2), "%")
-
+    # Ensure the image has 3 channels (RGB)
+    if processed_image.shape[-1] != 3:
+        st.error("Please upload an RGB image (with 3 color channels).")
+    else:
+        # Call model with specific parameters matching its expected signature
+        predictions = model(processed_image)
+        
+        # Get the highest probability class
+        predicted_class = np.argmax(predictions)
+        clothing_item = imagenet_labels[predicted_class]
+        
+        # Display the classification result
+        st.subheader(f"🛍️ Detected Clothing Item: **{clothing_item}**")
+        st.write("Prediction Confidence:", round(float(np.max(predictions)) * 100, 2), "%")
