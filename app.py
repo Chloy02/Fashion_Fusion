@@ -225,15 +225,26 @@ def get_style_recommendations(category: str,
     
     return recommendations
 
-def display_recommendations(category: str, confidence: float, col):
+def fetch_api_recommendations(category: str, confidence: float, endpoint: str, api_key: str) -> List[Dict[str, str]]:
+    """Simulate fetching additional recommendations from an external API.
+       In a real app, you'd use requests or another HTTP library to call the API."""
+    if endpoint and api_key:
+        # Simulated API response
+        return [
+            {"tip": "External API suggestion: Try a vintage look!", "occasion": "special"},
+            {"tip": "External API suggestion: Consider bold prints for a party vibe!", "occasion": "party"}
+        ]
+    return []
+
+def display_recommendations(category: str, confidence: float, col, api_endpoint: str, api_key: str, api_enabled: bool):
     """Display recommendations in the Streamlit column."""
     try:
         # Build user preferences from session state
         user_prefs = {
             'style': st.session_state.get('style', 'casual'),
             'gender_style': st.session_state.get('gender_style', 'all'),
-            'favorite_colors': ['blue', 'black'],  # Placeholder for future use
-            'occasions': ['work', 'casual']          # Placeholder for future use
+            'favorite_colors': ['blue', 'black'],  # Placeholder for future customization
+            'occasions': ['work', 'casual']          # Placeholder for future customization
         }
         
         recommendations = get_style_recommendations(
@@ -242,6 +253,11 @@ def display_recommendations(category: str, confidence: float, col):
             user_preferences=user_prefs,
             season=get_current_season()
         )
+        
+        # If external API is enabled, merge its recommendations
+        if api_enabled:
+            api_recs = fetch_api_recommendations(category, confidence, api_endpoint, api_key)
+            recommendations.extend(api_recs)
         
         if not recommendations:
             col.info("No specific recommendations available for this category.")
@@ -305,7 +321,7 @@ if 'gender_style' not in st.session_state:
 if 'style' not in st.session_state:
     st.session_state.style = 'casual'
 
-# Sidebar for user preferences
+# Sidebar for user preferences and advanced settings
 with st.sidebar:
     st.title("Style Preferences")
     st.session_state.gender_style = st.selectbox(
@@ -322,6 +338,23 @@ with st.sidebar:
         index=0,
         help="Choose whether you prefer a casual or formal look"
     )
+    
+    st.write("---")
+    st.header("Advanced Settings")
+    # Confidence threshold slider for model predictions
+    confidence_threshold = st.slider(
+        "Confidence Threshold",
+        min_value=0.0, max_value=1.0, value=0.1, step=0.05,
+        help="Set the minimum confidence required to display a prediction."
+    )
+    
+    # External API settings
+    api_enabled = st.checkbox("Enable External API Recommendations", value=False)
+    api_endpoint = ""
+    api_key = ""
+    if api_enabled:
+        api_endpoint = st.text_input("API Endpoint", value="https://example.com/api")
+        api_key = st.text_input("API Key", type="password")
     
     st.write("---")
     st.write("### Additional Settings")
@@ -353,8 +386,8 @@ if uploaded_file is not None:
             predictions = model.predict(processed_image)
             progress_bar.progress(66)
             
-            # Check if any prediction is confidently above threshold (e.g., >10%)
-            significant = [conf for conf in predictions[0] if conf > 0.1]
+            # Check if any prediction is confidently above threshold
+            significant = [conf for conf in predictions[0] if conf > confidence_threshold]
             if not significant:
                 st.warning("Hmm... our model isn't too sure about this one. Try a clearer image!")
             progress_bar.progress(100)
@@ -364,9 +397,9 @@ if uploaded_file is not None:
         
         with col1:
             st.subheader("Classification Results:")
-            # Iterate over each category and display if confidence > 10%
+            # Iterate over each category and display if confidence > threshold
             for category, confidence in zip(FASHION_CATEGORIES.keys(), predictions[0]):
-                if confidence > 0.1:
+                if confidence > confidence_threshold:
                     st.success(f"🏷️ **{category.title()}**: {confidence*100:.1f}%")
                     # For high confidence, list out possible subcategories
                     if confidence > 0.5:
@@ -382,7 +415,7 @@ if uploaded_file is not None:
             top_idx = np.argmax(predictions[0])
             top_category = list(FASHION_CATEGORIES.keys())[top_idx]
             top_confidence = predictions[0][top_idx]
-            display_recommendations(top_category, top_confidence, col2)
+            display_recommendations(top_category, top_confidence, col2, api_endpoint, api_key, api_enabled)
         
     except Exception as e:
         st.error(f"Error processing image: {str(e)}")
