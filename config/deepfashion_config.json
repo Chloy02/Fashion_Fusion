@@ -1,0 +1,14 @@
+{
+    "base_dir": "/home/chloy/Datasets/DeepFashion",
+    "annotation_file": "annotation.json",
+    "img_dir": "img",
+    "categories": {
+      "tops": ["short sleeve top", "long sleeve top", "short sleeve outwear", "long sleeve outwear"],
+      "bottoms": ["shorts", "trousers", "skirt", "short sleeve dress", "long sleeve dress"],
+      "dresses": ["short sleeve dress", "long sleeve dress", "vest dress", "sling dress"],
+      "outerwear": ["vest", "jacket", "coat"],
+      "footwear": ["shoes", "boots"],
+      "accessories": ["accessories", "belt", "hat", "glasses"]
+    }
+  }
+  

@@ -1,0 +1,187 @@
+{
+    "FASHION_CATEGORIES": {
+      "tops": {
+        "all": ["t-shirt", "sweater"],
+        "masculine": ["dress shirt", "polo", "henley"],
+        "feminine": ["blouse", "crop top", "camisole"]
+      },
+      "bottoms": {
+        "all": ["jeans", "shorts", "trousers"],
+        "masculine": ["cargo pants", "chinos"],
+        "feminine": ["skirt", "leggings", "culottes"]
+      },
+      "dresses": {
+        "all": ["jumpsuit"],
+        "feminine": ["dress", "midi dress", "maxi dress", "sundress"],
+        "masculine": ["kaftan", "kurta"]
+      },
+      "outerwear": {
+        "all": ["jacket", "coat"],
+        "masculine": ["bomber jacket", "leather jacket"],
+        "feminine": ["cardigan", "shawl", "bolero"]
+      },
+      "footwear": {
+        "all": ["sneakers", "boots"],
+        "masculine": ["oxfords", "loafers"],
+        "feminine": ["heels", "flats", "wedges"]
+      },
+      "accessories": {
+        "all": ["bag", "scarf", "sunglasses"],
+        "masculine": ["tie", "bow tie", "wallet"],
+        "feminine": ["clutch", "statement necklace", "earrings"]
+      }
+    },
+    "STYLE_RECOMMENDATIONS": {
+      "tops": {
+        "casual": {
+          "all": [
+            {"tip": "Layer with a denim jacket", "occasion": "weekend"},
+            {"tip": "Add a statement watch", "occasion": "daily"}
+          ],
+          "masculine": [
+            {"tip": "Roll up sleeves for a casual look", "occasion": "daily"},
+            {"tip": "Pair with dark wash jeans", "occasion": "casual"}
+          ],
+          "feminine": [
+            {"tip": "Front-tuck with high-waisted bottoms", "occasion": "daily"},
+            {"tip": "Add delicate layered necklaces", "occasion": "casual"}
+          ]
+        },
+        "formal": {
+          "all": [
+            {"tip": "Add a blazer for instant polish", "occasion": "business"}
+          ],
+          "masculine": [
+            {"tip": "Pair with a silk tie", "occasion": "formal"},
+            {"tip": "Add cufflinks for elegance", "occasion": "business"}
+          ],
+          "feminine": [
+            {"tip": "Add pearl accessories", "occasion": "formal"},
+            {"tip": "Pair with a pencil skirt", "occasion": "business"}
+          ]
+        }
+      },
+      "bottoms": {
+        "casual": {
+          "all": [
+            {"tip": "Pair with a simple tee", "occasion": "casual"},
+            {"tip": "Try a relaxed fit for comfort", "occasion": "weekend"}
+          ],
+          "masculine": [
+            {"tip": "Match with a crisp button-down", "occasion": "daily"}
+          ],
+          "feminine": [
+            {"tip": "Combine with a cute blouse", "occasion": "casual"}
+          ]
+        },
+        "formal": {
+          "all": [
+            {"tip": "Tuck in for a polished look", "occasion": "business"}
+          ],
+          "masculine": [
+            {"tip": "Pair with a tailored jacket", "occasion": "formal"}
+          ],
+          "feminine": [
+            {"tip": "Opt for a sleek pencil skirt", "occasion": "formal"}
+          ]
+        }
+      },
+      "dresses": {
+        "casual": {
+          "all": [
+            {"tip": "Pair with sandals for a relaxed vibe", "occasion": "weekend"}
+          ],
+          "masculine": [
+            {"tip": "Try a modern twist with minimal accessories", "occasion": "daily"}
+          ],
+          "feminine": [
+            {"tip": "Add a belt to enhance your silhouette", "occasion": "casual"}
+          ]
+        },
+        "formal": {
+          "all": [
+            {"tip": "Accessorize with elegant jewelry", "occasion": "event"}
+          ],
+          "masculine": [
+            {"tip": "Choose classic cuts for a refined style", "occasion": "formal"}
+          ],
+          "feminine": [
+            {"tip": "Opt for high heels and statement earrings", "occasion": "formal"}
+          ]
+        }
+      },
+      "outerwear": {
+        "casual": {
+          "all": [
+            {"tip": "Layer with a light scarf", "occasion": "daily"}
+          ],
+          "masculine": [
+            {"tip": "Pair with a rugged look", "occasion": "casual"}
+          ],
+          "feminine": [
+            {"tip": "Consider a chic cardigan", "occasion": "casual"}
+          ]
+        },
+        "formal": {
+          "all": [
+            {"tip": "Choose a tailored coat", "occasion": "business"}
+          ],
+          "masculine": [
+            {"tip": "Opt for a classic overcoat", "occasion": "formal"}
+          ],
+          "feminine": [
+            {"tip": "Pair with elegant accessories", "occasion": "formal"}
+          ]
+        }
+      },
+      "footwear": {
+        "casual": {
+          "all": [
+            {"tip": "Keep it comfy with stylish sneakers", "occasion": "daily"}
+          ],
+          "masculine": [
+            {"tip": "Match with casual jeans", "occasion": "casual"}
+          ],
+          "feminine": [
+            {"tip": "Try cute flats for a relaxed look", "occasion": "casual"}
+          ]
+        },
+        "formal": {
+          "all": [
+            {"tip": "Opt for polished shoes", "occasion": "business"}
+          ],
+          "masculine": [
+            {"tip": "Wear dress shoes for a sharp appearance", "occasion": "formal"}
+          ],
+          "feminine": [
+            {"tip": "Pair with elegant heels", "occasion": "formal"}
+          ]
+        }
+      },
+      "accessories": {
+        "casual": {
+          "all": [
+            {"tip": "Add a casual watch or bracelet", "occasion": "daily"}
+          ],
+          "masculine": [
+            {"tip": "Try a sleek wallet", "occasion": "casual"}
+          ],
+          "feminine": [
+            {"tip": "Experiment with layered necklaces", "occasion": "casual"}
+          ]
+        },
+        "formal": {
+          "all": [
+            {"tip": "Keep accessories minimal for elegance", "occasion": "business"}
+          ],
+          "masculine": [
+            {"tip": "Opt for a classic tie or cufflinks", "occasion": "formal"}
+          ],
+          "feminine": [
+            {"tip": "Choose a statement clutch", "occasion": "formal"}
+          ]
+        }
+      }
+    }
+  }
+  

@@ -2,3 +2,5 @@ streamlit==1.43.2
 tensorflow==2.19.0
 numpy==1.26.0
 pillow==11.1.0
+tensorflow-addons==0.21.0
+pandas==2.1.1
