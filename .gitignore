@@ -1,0 +1,8 @@
+# Dataset files
+datasets/
+datasets/*
+
+# Model files
+models/
+models/*
+*.h5

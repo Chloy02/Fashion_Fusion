@@ -1,28 +1,39 @@
 import tensorflow as tf
-from app import DeepFashionDataset, load_model
+from dataset import DeepFashionDataset
 import os
 import sys
+
+def create_model(num_classes):
+    base_model = tf.keras.applications.ResNet50(
+        include_top=False,
+        weights='imagenet',
+        input_shape=(224, 224, 3)
+    )
+    
+    model = tf.keras.Sequential([
+        base_model,
+        tf.keras.layers.GlobalAveragePooling2D(),
+        tf.keras.layers.Dense(512, activation='relu'),
+        tf.keras.layers.Dropout(0.5),
+        tf.keras.layers.Dense(num_classes, activation='softmax')
+    ])
+    
+    model.compile(
+        optimizer='adam',
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
+    
+    return model
 
 def train_model():
     try:
         # Initialize dataset
         dataset = DeepFashionDataset()
         
-        if not dataset.annotations.get("annotations"):
-            print("\nError: DeepFashion dataset not properly configured!")
-            print("\nPlease follow these steps:")
-            print("1. Download the DeepFashion dataset")
-            print("2. Create the following directory structure:")
-            print("   datasets/")
-            print("   └── deepfashion/")
-            print("       ├── annotations.json")
-            print("       └── images/")
-            print("3. Update config/dataset_config.json with correct paths")
-            sys.exit(1)
-        
-        # Load model
-        print("Loading model...")
-        model = load_model()
+        # Create model
+        print("Creating model...")
+        model = create_model(len(dataset.categories))
         
         # Training parameters
         EPOCHS = 50
@@ -41,6 +52,8 @@ def train_model():
                 loss, accuracy = model.train_on_batch(images, labels)
                 if step % 10 == 0:
                     print(f"Step {step}: loss = {loss:.4f}, accuracy = {accuracy:.4f}")
+            
+            # Save model checkpoint
             model.save(f'models/deepfashion_model_epoch_{epoch+1}.h5')
             print(f"Saved model checkpoint for epoch {epoch+1}")
 
