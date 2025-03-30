@@ -35,23 +35,44 @@ DEEPFASHION_CONFIG = deepfashion_config
 
 # ===================== DeepFashion Dataset Class =====================
 class DeepFashionDataset:
-    def __init__(self, config=DEEPFASHION_CONFIG):
-        self.config = config
-        self.base_dir = Path(config['base_dir'])
-        self.img_dir = self.base_dir / config['img_dir']
-        self.annotations = self._load_annotations()
-        self.category_mapping = self._create_category_mapping()
+    def __init__(self, config_path="config/dataset_config.json"):
+        # Load configuration
+        try:
+            with open(config_path) as f:
+                self.config = json.load(f)['dataset']
+        except FileNotFoundError:
+            print(f"Config file not found at {config_path}. Using default configuration.")
+            self.config = {
+                "base_dir": "datasets/deepfashion",
+                "annotation_file": "annotations.json",
+                "img_dir": "images"
+            }
+
+        # Setup paths
+        self.base_dir = Path(self.config['base_dir'])
+        self.img_dir = self.base_dir / self.config['img_dir']
+        
+        # Create directories if they don't exist
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        self.img_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Initialize empty annotations if file doesn't exist
+        self.annotations_path = self.base_dir / self.config['annotation_file']
+        if not self.annotations_path.exists():
+            print(f"Warning: Annotations file not found at {self.annotations_path}")
+            print("Please download the DeepFashion dataset and update the paths in config/dataset_config.json")
+            self.annotations = {"annotations": []}
+        else:
+            self.annotations = self._load_annotations()
 
     def _load_annotations(self):
-        with open(self.base_dir / self.config['annotation_file']) as f:
-            return json.load(f)
-
-    def _create_category_mapping(self):
-        mapping = {}
-        for main_cat, sub_cats in self.config['categories'].items():
-            for sub_cat in sub_cats:
-                mapping[sub_cat] = main_cat
-        return mapping
+        """Load and parse DeepFashion annotations"""
+        try:
+            with open(self.annotations_path) as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"Error loading annotations: {e}")
+            return {"annotations": []}
 
     def preprocess_image(self, image_path):
         img = load_img(image_path, target_size=(224, 224))
@@ -59,6 +80,14 @@ class DeepFashionDataset:
         return preprocess_input(img_array)
 
     def get_batch(self, batch_size=32):
+        """Generate a batch of preprocessed images and labels"""
+        if not self.annotations.get("annotations"):
+            raise ValueError(
+                "No annotations found. Please ensure the DeepFashion dataset is properly set up:\n"
+                "1. Download the dataset from the official source\n"
+                "2. Update the paths in config/dataset_config.json\n"
+                "3. Ensure the annotations file is properly formatted"
+            )
         images = []
         labels = []
         category_indices = {cat: idx for idx, cat in enumerate(self.config['categories'].keys())}

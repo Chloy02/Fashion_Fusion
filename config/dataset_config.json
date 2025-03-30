@@ -1,0 +1,7 @@
+{
+    "dataset": {
+        "base_dir": "datasets/deepfashion",
+        "annotation_file": "annotations.json",
+        "img_dir": "images"
+    }
+}
