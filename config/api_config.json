@@ -1,0 +1,7 @@
+{
+    "groq": {
+        "model": "mixtral-8x7b-32768",
+        "temperature": 0.7,
+        "max_tokens": 300
+    }
+}

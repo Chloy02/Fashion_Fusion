@@ -12,6 +12,7 @@ from tensorflow.keras.applications.resnet50 import preprocess_input
 import random
 from datetime import datetime
 from typing import Dict, List
+from groq import Groq
 
 # Set up the Streamlit page config
 st.set_page_config(page_title="FashionFusion", layout="wide")

@@ -4,3 +4,5 @@ numpy==1.26.0
 pillow==11.1.0
 tensorflow-addons==0.21.0
 pandas==2.1.1
+groq==0.3.0
+python-dotenv==1.0.0
