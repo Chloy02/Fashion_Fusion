@@ -1,13 +1,39 @@
 {
-    "categories": [
-        "tops",
-        "bottoms",
-        "dresses",
-        "outerwear",
-        "footwear",
-        "accessories"
-    ],
-    "image_size": 224,
-    "batch_size": 32
+    "categories": {
+        "tops": {
+            "name": "tops",
+            "subcategories": ["t-shirt", "sweater", "blouse", "shirt"]
+        },
+        "bottoms": {
+            "name": "bottoms",
+            "subcategories": ["jeans", "shorts", "trousers", "skirt"]
+        },
+        "dresses": {
+            "name": "dresses",
+            "subcategories": ["dress", "jumpsuit"]
+        },
+        "outerwear": {
+            "name": "outerwear",
+            "subcategories": ["jacket", "coat", "cardigan"]
+        },
+        "footwear": {
+            "name": "footwear",
+            "subcategories": ["sneakers", "boots", "heels", "flats"]
+        },
+        "accessories": {
+            "name": "accessories",
+            "subcategories": ["bag", "scarf", "sunglasses", "jewelry"]
+        }
+    },
+    "image_settings": {
+        "size": [224, 224],
+        "channels": 3
+    },
+    "training": {
+        "batch_size": 32,
+        "validation_split": 0.2,
+        "learning_rate": 0.001,
+        "epochs": 50
+    }
 }
   

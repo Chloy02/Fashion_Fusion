@@ -1,8 +1,6 @@
-streamlit==1.43.2
-tensorflow==2.19.0
-numpy==1.26.0
-pillow==11.1.0
-tensorflow-addons==0.21.0
-pandas==2.1.1
-groq==0.3.0
-python-dotenv==1.0.0
+tensorflow>=2.13.0
+streamlit>=1.24.0
+Pillow>=9.5.0
+numpy>=1.23.5
+pandas>=2.0.3
+pathlib>=1.0.1

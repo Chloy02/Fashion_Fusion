@@ -12,7 +12,6 @@ from tensorflow.keras.applications.resnet50 import preprocess_input
 import random
 from datetime import datetime
 from typing import Dict, List
-from groq import Groq
 
 # Set up the Streamlit page config
 st.set_page_config(page_title="FashionFusion", layout="wide")
@@ -163,37 +162,48 @@ def display_recommendations(category: str, confidence: float, col, api_endpoint:
 # ===================== Model Loading and Preprocessing for Uploaded Images =====================
 @st.cache_resource
 def load_model():
-    base_model = tf.keras.applications.ResNet50(
-        weights='imagenet',
-        include_top=False,
-        input_shape=(224, 224, 3)
-    )
-    for layer in base_model.layers[:100]:
-        layer.trainable = False
-    inputs = tf.keras.Input(shape=(224, 224, 3))
-    x = base_model(inputs)
-    x1 = tf.keras.layers.GlobalAveragePooling2D()(x)
-    x1 = tf.keras.layers.Dense(1024, activation='relu')(x1)
-    x1 = tf.keras.layers.BatchNormalization()(x1)
-    x1 = tf.keras.layers.Dropout(0.5)(x1)
-    x2 = tf.keras.layers.Conv2D(512, (1, 1))(x)
-    x2 = tf.keras.layers.BatchNormalization()(x2)
-    x2 = tf.keras.layers.Activation('relu')(x2)
-    attention_weights = tf.keras.layers.Conv2D(1, (1, 1), activation='sigmoid')(x2)
-    x2 = x2 * attention_weights
-    x2 = tf.keras.layers.GlobalAveragePooling2D()(x2)
-    x = tf.keras.layers.Concatenate()([x1, x2])
-    x = tf.keras.layers.Dense(512, activation='relu')(x)
-    x = tf.keras.layers.BatchNormalization()(x)
-    x = tf.keras.layers.Dropout(0.3)(x)
-    outputs = tf.keras.layers.Dense(len(DEEPFASHION_CONFIG['categories']), activation='softmax')(x)
-    model = tf.keras.Model(inputs=inputs, outputs=outputs)
-    model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
-        loss='categorical_crossentropy',
-        metrics=['accuracy']
-    )
-    return model
+    """Load the fashion classification model."""
+    try:
+        # Try loading models in order of preference
+        model_paths = [
+            Path("models/latest_model.keras"),
+            Path("models/latest_model.h5")
+        ]
+        
+        for model_path in model_paths:
+            if model_path.exists():
+                try:
+                    model = tf.keras.models.load_model(model_path)
+                    st.success(f"Successfully loaded model: {model_path}")
+                    return model
+                except Exception as e:
+                    st.warning(f"Failed to load {model_path}: {str(e)}")
+                    continue
+        
+        # If no saved model found, create new one
+        st.info("No saved model found. Creating new model...")
+        base_model = tf.keras.applications.ResNet50(
+            weights='imagenet',
+            include_top=False,
+            input_shape=(224, 224, 3)
+        )
+        
+        # Add custom layers
+        x = tf.keras.layers.GlobalAveragePooling2D()(base_model.output)
+        x = tf.keras.layers.Dense(1024, activation='relu')(x)
+        x = tf.keras.layers.Dropout(0.5)(x)
+        outputs = tf.keras.layers.Dense(
+            len(DEEPFASHION_CONFIG['categories']), 
+            activation='softmax'
+        )(x)
+        
+        model = tf.keras.Model(base_model.input, outputs)
+        model.save('models/latest_model.keras')
+        return model
+        
+    except Exception as e:
+        st.error(f"Error loading model: {str(e)}")
+        raise
 
 def preprocess_uploaded_image(image):
     image = image.resize((224, 224))
