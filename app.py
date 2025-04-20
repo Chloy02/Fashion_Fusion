@@ -12,6 +12,11 @@ from tensorflow.keras.applications.resnet50 import preprocess_input
 import random
 from datetime import datetime
 from typing import Dict, List
+import requests
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Set up the Streamlit page config
 st.set_page_config(page_title="FashionFusion", layout="wide")
@@ -27,6 +32,9 @@ with open(CONFIG_DIR / "fashion_config.json", "r") as f:
 
 with open(CONFIG_DIR / "deepfashion_config.json", "r") as f:
     deepfashion_config = json.load(f)
+
+with open(CONFIG_DIR / "api_config.json", "r") as f:
+    api_config = json.load(f)
 
 # Extract configurations
 FASHION_CATEGORIES = fashion_config["FASHION_CATEGORIES"]
@@ -129,6 +137,91 @@ def fetch_api_recommendations(category: str, confidence: float, endpoint: str, a
         ]
     return []
 
+def get_groq_suggestions(category: str, confidence: float, style_preference: str, season: str) -> List[Dict[str, str]]:
+    """Get fashion suggestions using Groq API"""
+    try:
+        groq_api_key = os.getenv('GROQ_API_KEY')
+        if not groq_api_key:
+            st.warning("Groq API key not found. Please set the GROQ_API_KEY environment variable.")
+            return []
+
+        headers = {
+            "Authorization": f"Bearer {groq_api_key}",
+            "Content-Type": "application/json"
+        }
+
+        prompt = f"""You are a fashion expert assistant. Generate 3 specific style suggestions for a {category} outfit.
+        Context:
+        - Style preference: {style_preference}
+        - Current season: {season}
+        - Focus on modern trends and practical advice
+        
+        Format your response as a JSON array with exactly 3 objects, each containing 'occasion' and 'tip' fields.
+        Keep each tip concise and specific to the category and style preference."""
+
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json={
+                "model": api_config["groq"]["model"],
+                "messages": [
+                    {"role": "system", "content": "You are a helpful fashion expert assistant that provides specific, practical style advice."},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": api_config["groq"]["temperature"],
+                "max_tokens": api_config["groq"]["max_tokens"],
+                "response_format": {"type": "json_object"}
+            },
+            timeout=15
+        )
+
+        if response.status_code == 200:
+            try:
+                content = response.json()["choices"][0]["message"]["content"]
+                # Ensure the content is properly formatted
+                if isinstance(content, str):
+                    content = json.loads(content)
+                
+                # Extract suggestions from the response
+                if "suggestions" in content:
+                    suggestions = content["suggestions"]
+                else:
+                    suggestions = content
+                
+                # Ensure we have a list of suggestions
+                if not isinstance(suggestions, list):
+                    suggestions = [suggestions]
+                
+                # Format and validate each suggestion
+                formatted_suggestions = []
+                for sugg in suggestions[:3]:  # Limit to 3 suggestions
+                    if isinstance(sugg, dict) and "occasion" in sugg and "tip" in sugg:
+                        formatted_suggestions.append({
+                            "occasion": str(sugg["occasion"]).strip(),
+                            "tip": str(sugg["tip"]).strip()
+                        })
+                
+                return formatted_suggestions
+
+            except (json.JSONDecodeError, KeyError, IndexError) as e:
+                st.warning(f"Error parsing Groq API response: {str(e)}")
+                return []
+        else:
+            error_msg = "Unknown error"
+            try:
+                error_detail = response.json()
+                if "error" in error_detail:
+                    error_msg = error_detail["error"].get("message", str(error_detail))
+            except:
+                error_msg = f"HTTP {response.status_code}"
+            
+            st.warning(f"Error from Groq API: {error_msg}")
+            return []
+
+    except Exception as e:
+        st.error(f"Error with Groq API: {str(e)}")
+        return []
+
 def display_recommendations(category: str, confidence: float, col, api_endpoint: str, api_key: str, api_enabled: bool):
     try:
         user_prefs = {
@@ -137,25 +230,42 @@ def display_recommendations(category: str, confidence: float, col, api_endpoint:
             'favorite_colors': ['blue', 'black'],
             'occasions': ['work', 'casual']
         }
+        
+        # Get base recommendations
         recommendations = get_style_recommendations(
             category=category,
             confidence=confidence,
             user_preferences=user_prefs,
             season=get_current_season()
         )
-        if api_enabled:
-            api_recs = fetch_api_recommendations(category, confidence, api_endpoint, api_key)
-            recommendations.extend(api_recs)
-        if not recommendations:
+        
+        # Get AI-powered suggestions from Groq
+        groq_suggestions = get_groq_suggestions(
+            category=category,
+            confidence=confidence,
+            style_preference=user_prefs['style'],
+            season=get_current_season()
+        )
+        
+        # Display recommendations
+        col.subheader("Personalized Style Suggestions")
+        
+        if groq_suggestions:
+            col.markdown("### 🤖 AI-Powered Suggestions:")
+            for suggestion in groq_suggestions:
+                col.markdown(f"**{suggestion['occasion'].title()}**: {suggestion['tip']}")
+            
+        if recommendations:
+            col.markdown("### 📚 Classic Style Tips:")
+            for rec in recommendations:
+                if isinstance(rec, dict):
+                    col.markdown(f"• **{rec['occasion'].title()}:** {rec['tip']}")
+                else:
+                    col.markdown(f"• {rec}")
+        
+        if not recommendations and not groq_suggestions:
             col.info("No specific recommendations available for this category.")
-            return
-        col.subheader("Personalized Style Suggestions:")
-        col.info(f"Based on your **{category.title()}**, here are some curated ideas:")
-        for rec in recommendations:
-            if isinstance(rec, dict):
-                col.write(f"• **{rec['occasion'].title()}:** {rec['tip']}")
-            else:
-                col.write(f"• {rec}")
+            
     except Exception as e:
         col.error(f"Error displaying recommendations: {str(e)}")
 
@@ -164,8 +274,10 @@ def display_recommendations(category: str, confidence: float, col, api_endpoint:
 def load_model():
     """Load the fashion classification model."""
     try:
-        # Try loading models in order of preference
+        # Try loading the trained models in order of preference
         model_paths = [
+            Path("models/final_model.h5"),           # Final trained model
+            Path("models/deepfashion_model_epoch_01.h5"),  # First epoch model
             Path("models/latest_model.keras"),
             Path("models/latest_model.h5")
         ]
@@ -180,30 +292,12 @@ def load_model():
                     st.warning(f"Failed to load {model_path}: {str(e)}")
                     continue
         
-        # If no saved model found, create new one
-        st.info("No saved model found. Creating new model...")
-        base_model = tf.keras.applications.ResNet50(
-            weights='imagenet',
-            include_top=False,
-            input_shape=(224, 224, 3)
-        )
-        
-        # Add custom layers
-        x = tf.keras.layers.GlobalAveragePooling2D()(base_model.output)
-        x = tf.keras.layers.Dense(1024, activation='relu')(x)
-        x = tf.keras.layers.Dropout(0.5)(x)
-        outputs = tf.keras.layers.Dense(
-            len(DEEPFASHION_CONFIG['categories']), 
-            activation='softmax'
-        )(x)
-        
-        model = tf.keras.Model(base_model.input, outputs)
-        model.save('models/latest_model.keras')
-        return model
+        st.error("No trained model found. Please ensure the model files are in the 'models' directory.")
+        return None
         
     except Exception as e:
         st.error(f"Error loading model: {str(e)}")
-        raise
+        return None
 
 def preprocess_uploaded_image(image):
     image = image.resize((224, 224))
@@ -227,16 +321,15 @@ def get_current_season():
         return 'fall'
 
 def process_predictions(predictions, confidence_threshold=0.1):
+    """Process model predictions and return sorted results"""
     category_names = list(DEEPFASHION_CONFIG['categories'].keys())
     results = []
     for idx, confidence in enumerate(predictions[0]):
         if confidence > confidence_threshold:
             category = category_names[idx]
-            subcategories = DEEPFASHION_CONFIG['categories'][category]
             results.append({
                 'category': category,
-                'confidence': confidence,
-                'subcategories': subcategories
+                'confidence': float(confidence)  # Convert to float for JSON serialization
             })
     return sorted(results, key=lambda x: x['confidence'], reverse=True)
 
@@ -279,49 +372,51 @@ with st.sidebar:
     st.write("### Additional Settings")
     st.write("Customize more options in future updates!")
 
-# ===================== Main Content: Image Upload, Prediction, and Display =====================
-st.title("👗 FashionFusion: Advanced Fashion Classifier")
-st.markdown("Upload an image of your fashion item, and we'll classify it and give you personalized style suggestions!")
-
-with st.spinner("Loading model... Please wait."):
+# ===================== Main Streamlit Interface =====================
+def main():
+    st.title("FashionFusion - Style Classification")
+    
+    # Load the model
     model = load_model()
-
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
-
-if uploaded_file is not None:
-    try:
-        image = Image.open(uploaded_file)
-        st.image(image, caption="Uploaded Image", use_column_width=True)
-        with st.spinner('Analyzing your fashion item...'):
-            progress_bar = st.progress(0)
+    if model is None:
+        st.error("Please train the model first before using the app.")
+        return
+    
+    # Create two columns for the interface
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.subheader("Upload Fashion Image")
+        uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+        
+        if uploaded_file is not None:
+            # Display the uploaded image
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Uploaded Image", use_column_width=True)
+            
+            # Process the image and get predictions
             processed_image = preprocess_uploaded_image(image)
-            progress_bar.progress(33)
             predictions = model.predict(processed_image)
-            progress_bar.progress(66)
-            significant = [conf for conf in predictions[0] if conf > confidence_threshold]
-            if not significant:
-                st.warning("Hmm... our model isn't too sure about this one. Try a clearer image!")
-            progress_bar.progress(100)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("Classification Results:")
-            for category, confidence in zip(FASHION_CATEGORIES.keys(), predictions[0]):
-                if confidence > confidence_threshold:
-                    st.success(f"🏷️ **{category.title()}**: {confidence*100:.1f}%")
-                    if confidence > 0.5:
-                        st.write("   _Possible subcategories:_")
-                        gender_style = st.session_state.gender_style
-                        subcats = FASHION_CATEGORIES[category].get('all', [])
-                        if gender_style != 'all':
-                            subcats.extend(FASHION_CATEGORIES[category].get(gender_style, []))
-                        for subcat in subcats:
-                            st.write(f"   • {subcat.title()}")
-        with col2:
-            top_idx = np.argmax(predictions[0])
-            top_category = list(FASHION_CATEGORIES.keys())[top_idx]
-            top_confidence = predictions[0][top_idx]
-            display_recommendations(top_category, top_confidence, col2, api_endpoint, api_key, api_enabled)
-    except Exception as e:
-        st.error(f"Error processing image: {str(e)}")
-else:
-    st.info("Awaiting your fashion upload... let's see what style gem you're rocking today!")
+            results = process_predictions(predictions)
+            
+            # Display predictions
+            st.subheader("Classification Results")
+            if results:
+                for result in results:
+                    st.write(f"**{result['category'].title()}**: {result['confidence']:.2%}")
+                    
+                    # Display recommendations based on the top prediction
+                    if result == results[0]:  # Only show recommendations for the top prediction
+                        display_recommendations(
+                            category=result['category'],
+                            confidence=result['confidence'],
+                            col=col2,
+                            api_endpoint="",  # Add your API endpoint if needed
+                            api_key="",       # Add your API key if needed
+                            api_enabled=False
+                        )
+            else:
+                st.warning("No confident predictions found for this image.")
+
+if __name__ == "__main__":
+    main()

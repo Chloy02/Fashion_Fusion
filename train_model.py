@@ -6,6 +6,11 @@ from pathlib import Path
 import psutil
 import time
 from datetime import datetime
+import numpy as np
+
+# Set up multi-threading configuration
+tf.config.threading.set_inter_op_parallelism_threads(6)  # Half of available cores
+tf.config.threading.set_intra_op_parallelism_threads(6)  # Half of available cores
 
 def get_system_stats():
     cpu_temp = psutil.sensors_temperatures().get('coretemp', [])
@@ -33,28 +38,24 @@ def create_model(num_classes):
         input_shape=(224, 224, 3)
     )
     
-    # Fine-tune the last few layers
-    for layer in base_model.layers[:-30]:
+    # Optimize layer freezing for faster training
+    for layer in base_model.layers[:-50]:  # Freeze fewer layers for faster training
         layer.trainable = False
     
     model = tf.keras.Sequential([
         base_model,
         tf.keras.layers.GlobalAveragePooling2D(),
         tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.Dense(2048, activation='relu'),
-        tf.keras.layers.Dropout(0.5),
-        tf.keras.layers.Dense(1024, activation='relu'),
-        tf.keras.layers.Dropout(0.4),
-        tf.keras.layers.Dense(512, activation='relu'),
+        tf.keras.layers.Dense(256, activation='relu'),  # Reduced dense layer size
         tf.keras.layers.Dropout(0.3),
         tf.keras.layers.Dense(num_classes, activation='softmax')
     ])
     
-    # Use a lower learning rate for fine-tuning
+    # Use a slightly higher learning rate for faster convergence
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0001),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.0002),
         loss='categorical_crossentropy',
-        metrics=['accuracy', tf.keras.metrics.TopKCategoricalAccuracy(k=3, name='top_3_accuracy')]
+        metrics=['accuracy']
     )
     
     return model
@@ -74,128 +75,138 @@ def find_latest_checkpoint():
     return latest_checkpoint, epoch_number
 
 def train_model():
+    # Setup logging first for proper error handling
+    log_file = f"logs/training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    os.makedirs("logs", exist_ok=True)
+    
+    def log_message(message):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"[{timestamp}] {message}"
+        print(log_entry)
+        with open(log_file, 'a') as f:
+            f.write(log_entry + '\n')
+    
     try:
-        # Initialize dataset
         dataset = DeepFashionDataset()
         
-        # Training parameters
-        TOTAL_EPOCHS = 100  # Increase epochs
-        BATCH_SIZE = 32
-        STEPS_PER_EPOCH = len(dataset.annotations['annotations']) // BATCH_SIZE
+        # Calculate steps per epoch based on dataset size
+        BATCH_SIZE = 64  # Increased batch size
+        total_samples = len(dataset.annotations['annotations'])
+        train_samples = int(total_samples * 0.8)  # 80% for training
         
-        # Learning rate schedule with warmup
-        initial_learning_rate = 0.0001
-        warmup_epochs = 5
-        decay_epochs = 20
+        # Limit steps per epoch to make training more manageable
+        STEPS_PER_EPOCH = min(500, train_samples // BATCH_SIZE)
         
-        def learning_rate_schedule(epoch):
-            if epoch < warmup_epochs:
-                return initial_learning_rate * ((epoch + 1) / warmup_epochs)
-            else:
-                return initial_learning_rate * (0.1 ** ((epoch - warmup_epochs) // decay_epochs))
+        log_message(f"Training configuration:")
+        log_message(f"Total samples: {total_samples}")
+        log_message(f"Training samples: {train_samples}")
+        log_message(f"Batch size: {BATCH_SIZE}")
+        log_message(f"Steps per epoch: {STEPS_PER_EPOCH}")
         
-        lr_scheduler = tf.keras.callbacks.LearningRateScheduler(learning_rate_schedule)
+        # Calculate class weights
+        category_counts = {}
+        for ann in dataset.annotations['annotations']:
+            cat = ann['category_name']
+            category_counts[cat] = category_counts.get(cat, 0) + 1
         
-        # System monitoring parameters
-        TEMP_THRESHOLD = 85  # Ryzen mobile CPUs should stay under 75°C
-        COOLING_PAUSE = 180  # 3 minutes cooling pause
+        total_samples = sum(category_counts.values())
+        class_weights = {}
+        for category, count in category_counts.items():
+            weight = total_samples / (len(category_counts) * count)
+            class_weights[dataset.category_to_idx[category]] = weight
         
-        # Create directory for checkpoints and logs
+        log_message("\nClass weights:")
+        for cat, weight in class_weights.items():
+            log_message(f"Category {cat}: {weight:.2f}")
+        
+        model = create_model(len(dataset.categories))
         os.makedirs("models", exist_ok=True)
-        os.makedirs("logs", exist_ok=True)
         
-        # Setup logging
-        log_file = f"logs/training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        val_dataset, train_dataset = dataset.get_validation_data(0.2)
         
-        def log_message(message):
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_entry = f"[{timestamp}] {message}"
-            print(log_entry)
-            with open(log_file, 'a') as f:
-                f.write(log_entry + '\n')
-
-        # Find latest checkpoint
-        latest_checkpoint, start_epoch = find_latest_checkpoint()
+        # Progress monitoring callback
+        class ProgressCallback(tf.keras.callbacks.Callback):
+            def __init__(self):
+                super().__init__()
+                self.last_batch_time = None
+                self.batch_times = []
+                
+            def on_epoch_begin(self, epoch, logs=None):
+                self.epoch_start_time = time.time()
+                log_message(f"\nStarting epoch {epoch + 1}")
+                self.last_batch_time = time.time()
+                self.batch_times = []
+            
+            def on_batch_end(self, batch, logs=None):
+                if batch % 10 == 0:  # Update every 10 batches
+                    current_time = time.time()
+                    if self.last_batch_time:
+                        batch_time = current_time - self.last_batch_time
+                        self.batch_times.append(batch_time)
+                        avg_time = sum(self.batch_times[-5:]) / min(len(self.batch_times), 5)
+                        
+                        # Calculate ETA for epoch
+                        remaining_batches = STEPS_PER_EPOCH - batch
+                        eta = remaining_batches * avg_time
+                        
+                        print(f"\rBatch {batch}/{STEPS_PER_EPOCH} "
+                              f"- Loss: {logs['loss']:.4f} "
+                              f"- Accuracy: {logs['accuracy']:.4f} "
+                              f"- ETA: {eta:.0f}s", end='')
+                    
+                    self.last_batch_time = current_time
+            
+            def on_epoch_end(self, epoch, logs=None):
+                time_taken = time.time() - self.epoch_start_time
+                print()  # New line after batch progress
+                log_message(f"Epoch {epoch + 1} completed in {time_taken:.2f} seconds")
+                log_message(f"Loss: {logs['loss']:.4f}, Accuracy: {logs['accuracy']:.4f}")
+                log_message(f"Val Loss: {logs['val_loss']:.4f}, Val Accuracy: {logs['val_accuracy']:.4f}")
+                
+                # Monitor system resources
+                stats = get_system_stats()
+                log_message(f"CPU Usage: {stats['cpu_percent']}%, Memory Usage: {stats['memory_percent']}%")
+                if stats['cpu_temp']:
+                    log_message(f"CPU Temperature: {stats['cpu_temp']}°C")
         
-        # Create or load model
-        if latest_checkpoint is not None:
-            log_message(f"Resuming from checkpoint: {latest_checkpoint} (Epoch {start_epoch})")
-            model = tf.keras.models.load_model(latest_checkpoint)
-        else:
-            log_message("Starting fresh training...")
-            model = create_model(len(dataset.categories))
-            start_epoch = 0
+        # Optimized callbacks
+        callbacks = [
+            ProgressCallback(),
+            tf.keras.callbacks.EarlyStopping(
+                monitor='val_accuracy',
+                patience=3,  # Reduced patience
+                restore_best_weights=True
+            ),
+            tf.keras.callbacks.ModelCheckpoint(
+                filepath='models/deepfashion_model_epoch_{epoch:02d}.h5',
+                save_best_only=True,
+                monitor='val_accuracy',
+                save_weights_only=False
+            ),
+            tf.keras.callbacks.ReduceLROnPlateau(
+                monitor='val_loss',
+                factor=0.5,
+                patience=2,
+                min_lr=1e-6
+            )
+        ]
         
-        # Update optimizer with learning rate schedule
-        model.compile(
-            optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate_schedule),
-            loss='categorical_crossentropy',
-            metrics=['accuracy']
+        # Start training with proper steps
+        history = model.fit(
+            train_dataset,
+            validation_data=val_dataset,
+            epochs=15,  # Reduced epochs
+            steps_per_epoch=STEPS_PER_EPOCH,
+            validation_steps=STEPS_PER_EPOCH // 5,  # 20% of steps for validation
+            callbacks=callbacks,
+            class_weight=class_weights,
+            verbose=0  # Using custom progress monitoring
         )
         
-        # Add validation data if available
-        validation_data = dataset.get_validation_data()  # You'll need to implement this
+        model.save('models/final_model.h5')
+        log_message("\nTraining completed successfully!")
+        log_message(f"Final validation accuracy: {history.history['val_accuracy'][-1]:.4f}")
         
-        # Training loop
-        training_start_time = time.time()
-        
-        try:
-            for epoch in range(start_epoch, TOTAL_EPOCHS):
-                epoch_start_time = time.time()
-                log_message(f"\nStarting Epoch {epoch + 1}/{TOTAL_EPOCHS}")
-                
-                for step in range(STEPS_PER_EPOCH):
-                    # Check system stats every 10 steps
-                    if step % 10 == 0:
-                        stats = get_system_stats()
-                        should_pause, reason = should_pause_training(stats)
-                        
-                        if should_pause:
-                            log_message(f"\nPausing training: {reason}")
-                            log_message(f"CPU: {stats['cpu_percent']}%, Memory: {stats['memory_percent']}%, Temperature: {stats['cpu_temp']}°C")
-                            log_message(f"Saving checkpoint before cooling pause...")
-                            
-                            # Save temporary checkpoint in new format
-                            temp_checkpoint = f'models/temp_checkpoint_epoch_{epoch+1}_step_{step}.keras'
-                            model.save(temp_checkpoint)  # Remove save_format parameter
-                            
-                            log_message(f"Cooling pause for {COOLING_PAUSE} seconds...")
-                            time.sleep(COOLING_PAUSE)
-                            
-                            log_message("Resuming training...")
-                            
-                    # Training step
-                    images, labels = dataset.get_batch(BATCH_SIZE)
-                    loss, accuracy = model.train_on_batch(images, labels)
-                    
-                    if step % 10 == 0:
-                        elapsed_time = time.time() - training_start_time
-                        log_message(f"Step {step}: loss = {loss:.4f}, accuracy = {accuracy:.4f} (Total training time: {elapsed_time/3600:.1f}h)")
-                
-                # Save epoch checkpoint in new format
-                checkpoint_path = f'models/deepfashion_model_epoch_{epoch+1}.keras'
-                model.save(checkpoint_path)  # Remove save_format parameter
-                
-                # Calculate epoch time
-                epoch_time = time.time() - epoch_start_time
-                log_message(f"\nEpoch {epoch + 1} completed in {epoch_time/60:.1f} minutes")
-                log_message(f"Checkpoint saved: {checkpoint_path}")
-                
-                # Save latest version in new format
-                model.save('models/latest_model.keras')  # Remove save_format parameter
-                
-                # Add validation step at end of each epoch
-                if validation_data:
-                    val_loss, val_accuracy = model.evaluate(validation_data[0], validation_data[1])
-                    log_message(f"Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}")
-        
-        except KeyboardInterrupt:
-            log_message("\nTraining interrupted by user...")
-            interrupt_checkpoint = f'models/interrupted_epoch_{epoch+1}_step_{step}.keras'
-            model.save(interrupt_checkpoint)  # Remove save_format parameter
-            log_message(f"Saved interrupt checkpoint: {interrupt_checkpoint}")
-            sys.exit(0)
-
     except Exception as e:
         log_message(f"\nError during training: {str(e)}")
         import traceback
@@ -205,18 +216,23 @@ def train_model():
 def test_dataset():
     dataset = DeepFashionDataset()
     
-    # Test single batch
-    images, labels = dataset.get_batch(4)
-    print("\nBatch test:")
-    print(f"Images shape: {images.shape}")
-    print(f"Labels shape: {labels.shape}")
-    print(f"Image value range: [{images.min():.2f}, {images.max():.2f}]")
+    # Get validation data
+    val_dataset, train_dataset = dataset.get_validation_data(0.2)
+    
+    # Test training batch
+    train_batch = next(iter(train_dataset))
+    print("\nTraining batch test:")
+    print(f"Images shape: {train_batch[0].shape}")
+    print(f"Labels shape: {train_batch[1].shape}")
+    # Convert tensor to numpy for min/max calculation
+    images_np = train_batch[0].numpy()
+    print(f"Image value range: [{images_np.min():.2f}, {images_np.max():.2f}]")
     
     # Test validation data
-    val_images, val_labels = dataset.get_validation_data(0.2)
     print("\nValidation data test:")
-    print(f"Validation images shape: {val_images.shape}")
-    print(f"Validation labels shape: {val_labels.shape}")
+    val_batch = next(iter(val_dataset))
+    print(f"Validation images shape: {val_batch[0].shape}")
+    print(f"Validation labels shape: {val_batch[1].shape}")
 
 if __name__ == "__main__":
     test_dataset()

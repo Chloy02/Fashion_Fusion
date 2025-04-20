@@ -1,0 +1,39 @@
+[2025-04-14 20:30:26] Training configuration:
+[2025-04-14 20:30:26] Total samples: 289229
+[2025-04-14 20:30:26] Training samples: 231383
+[2025-04-14 20:30:26] Batch size: 64
+[2025-04-14 20:30:26] Steps per epoch: 500
+[2025-04-14 20:30:26] 
+Class weights:
+[2025-04-14 20:30:26] Category 0: 0.54
+[2025-04-14 20:30:26] Category 2: 0.68
+[2025-04-14 20:30:26] Category 1: 1.10
+[2025-04-14 20:30:26] Category 3: 1.36
+[2025-04-14 20:30:26] Category 4: 47.89
+[2025-04-14 20:30:28] 
+Starting epoch 1
+[2025-04-14 21:34:03] Epoch 1 completed in 3815.30 seconds
+[2025-04-14 21:34:03] Loss: 1.0442, Accuracy: 0.6100
+[2025-04-14 21:34:03] Val Loss: 0.8981, Val Accuracy: 0.6837
+[2025-04-14 21:34:03] CPU Usage: 58.2%, Memory Usage: 68.6%
+[2025-04-14 21:34:04] 
+Starting epoch 2
+[2025-04-14 22:37:41] Epoch 2 completed in 3816.79 seconds
+[2025-04-14 22:37:41] Loss: 1.2921, Accuracy: 0.5817
+[2025-04-14 22:37:41] Val Loss: 1.5442, Val Accuracy: 0.6236
+[2025-04-14 22:37:41] CPU Usage: 57.1%, Memory Usage: 69.4%
+[2025-04-14 22:37:41] 
+Starting epoch 3
+[2025-04-14 23:33:53] Epoch 3 completed in 3372.50 seconds
+[2025-04-14 23:33:53] Loss: 1.4770, Accuracy: 0.6175
+[2025-04-14 23:33:53] Val Loss: 1.4326, Val Accuracy: 0.6106
+[2025-04-14 23:33:53] CPU Usage: 49.6%, Memory Usage: 67.0%
+[2025-04-14 23:33:53] 
+Starting epoch 4
+[2025-04-15 00:38:24] Epoch 4 completed in 3870.11 seconds
+[2025-04-15 00:38:24] Loss: 0.9272, Accuracy: 0.6426
+[2025-04-15 00:38:24] Val Loss: 1.1418, Val Accuracy: 0.6025
+[2025-04-15 00:38:24] CPU Usage: 56.1%, Memory Usage: 66.2%
+[2025-04-15 00:38:24] 
+Training completed successfully!
+[2025-04-15 00:38:24] Final validation accuracy: 0.6025

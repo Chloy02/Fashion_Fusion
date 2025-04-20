@@ -7,70 +7,139 @@ import random
 from pathlib import Path
 
 class DeepFashionDataset:
-    def __init__(self):
-        # Load configs first
-        with open('config/deepfashion_config.json', 'r') as f:
-            self.config = json.load(f)
-            
-        # Set categories before verification
-        self.categories = self.config['categories']
-        self.num_classes = len(self.categories)
+    def __init__(self, config_path='config/deepfashion_config.json'):
+        self.config = self._load_config(config_path)
+        self.annotations = self._load_annotations()
+        self.categories = list(self.config['categories'].keys())
         self.category_to_idx = {cat: idx for idx, cat in enumerate(self.categories)}
+        self.image_dir = 'datasets/deepfashion/images'
         
-        # Image settings for ResNet50
-        self.image_size = (224, 224)
-        self.is_training = True
+        # Print dataset statistics
+        self._print_dataset_stats()
         
-        # Load annotations
+        # Create TensorFlow dataset with optimized parallel processing
+        self._create_data_pipeline()
+    
+    def _load_config(self, config_path):
+        """Load configuration from JSON file"""
+        try:
+            with open(config_path, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            print(f"Error: Configuration file not found at {config_path}")
+            raise
+        except json.JSONDecodeError:
+            print(f"Error: Invalid JSON format in {config_path}")
+            raise
+    
+    def _load_annotations(self):
+        """Load annotations from JSON file"""
         try:
             with open('datasets/deepfashion/annotations.json', 'r') as f:
-                self.annotations = json.load(f)
+                annotations = json.load(f)
+            if not self._verify_annotations(annotations):
+                raise ValueError("Invalid annotations format")
+            return annotations
         except FileNotFoundError:
             print("Error: annotations.json not found in datasets/deepfashion/")
-            print("Please run create_annotations.py first")
             raise
         except json.JSONDecodeError:
             print("Error: Invalid JSON format in annotations.json")
             raise
-            
-        # Verify annotations format
-        if not self._verify_annotations():
-            raise ValueError("Invalid annotations format. Please check the structure of annotations.json")
-        
-        # Print dataset statistics
-        self._print_dataset_stats()
     
-    def _verify_annotations(self):
-        """Verify annotations format and image files existence"""
-        try:
-            # Check basic structure
-            if 'annotations' not in self.annotations:
-                print("Error: Missing 'annotations' key in annotations file")
-                return False
-            
-            # Check each annotation
-            for ann in self.annotations['annotations']:
-                if not all(key in ann for key in ['file_name', 'category_name']):
-                    print(f"Error: Missing required keys in annotation: {ann}")
-                    return False
-                
-                # Check if image file exists
-                img_path = Path('datasets/deepfashion/images') / ann['file_name']
-                if not img_path.exists():
-                    print(f"Error: Image file not found: {img_path}")
-                    return False
-                
-                # Verify category exists in config
-                if ann['category_name'] not in self.categories:
-                    print(f"Error: Invalid category '{ann['category_name']}' not found in config")
-                    print(f"Valid categories are: {list(self.categories)}")
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            print(f"Error verifying annotations: {str(e)}")
+    def _verify_annotations(self, annotations):
+        """Verify the format of annotations"""
+        if not isinstance(annotations, dict) or 'annotations' not in annotations:
             return False
+        for ann in annotations['annotations']:
+            if not all(key in ann for key in ['file_name', 'category_name']):
+                return False
+            if ann['category_name'] not in self.config['categories']:
+                return False
+        return True
+    
+    def _create_data_pipeline(self):
+        """Create TensorFlow dataset pipeline with optimized parallel processing"""
+        # Convert lists to numpy arrays first for better tensor conversion
+        image_paths = [os.path.join(self.image_dir, ann['file_name']) 
+                      for ann in self.annotations['annotations']]
+        category_indices = [self.category_to_idx[ann['category_name']] 
+                           for ann in self.annotations['annotations']]
+        
+        # Create dataset from tensors
+        dataset = tf.data.Dataset.from_tensor_slices({
+            'image_path': image_paths,
+            'category_idx': category_indices
+        })
+        
+        # Optimize shuffling for memory and speed
+        dataset = dataset.shuffle(buffer_size=1000, reshuffle_each_iteration=True)
+        
+        # Optimize parallel processing for image loading
+        dataset = dataset.map(
+            self._load_and_preprocess_image,
+            num_parallel_calls=tf.data.AUTOTUNE
+        )
+        
+        # Optimize batching and prefetching
+        dataset = dataset.batch(64)
+        dataset = dataset.prefetch(tf.data.AUTOTUNE)
+        
+        self.dataset = dataset
+    
+    def _load_and_preprocess_image(self, x):
+        """Load and preprocess a single image with optimized caching"""
+        # Read and decode image
+        image = tf.io.read_file(x['image_path'])
+        image = tf.image.decode_jpeg(image, channels=3)
+        
+        # Resize with parallel processing optimization
+        image = tf.image.resize(image, [224, 224], method='bilinear')
+        image = tf.cast(image, tf.float32)
+        image = tf.keras.applications.resnet50.preprocess_input(image)
+        
+        # Create one-hot label
+        label = tf.one_hot(x['category_idx'], depth=len(self.categories))
+        
+        return image, label
+    
+    def get_validation_data(self, validation_split=0.2):
+        """Split dataset into training and validation sets with optimized processing"""
+        total_samples = len(self.annotations['annotations'])
+        val_size = int(total_samples * validation_split)
+        
+        # Create paths and indices lists
+        all_image_paths = [os.path.join(self.image_dir, ann['file_name']) 
+                          for ann in self.annotations['annotations']]
+        all_category_indices = [self.category_to_idx[ann['category_name']] 
+                              for ann in self.annotations['annotations']]
+        
+        # Create validation dataset
+        val_dataset = tf.data.Dataset.from_tensor_slices({
+            'image_path': all_image_paths[:val_size],
+            'category_idx': all_category_indices[:val_size]
+        })
+        
+        # Create training dataset
+        train_dataset = tf.data.Dataset.from_tensor_slices({
+            'image_path': all_image_paths[val_size:],
+            'category_idx': all_category_indices[val_size:]
+        })
+        
+        # Optimize validation dataset pipeline
+        val_dataset = val_dataset.map(
+            self._load_and_preprocess_image,
+            num_parallel_calls=tf.data.AUTOTUNE
+        ).batch(64).prefetch(tf.data.AUTOTUNE)
+        
+        # Optimize training dataset pipeline
+        train_dataset = train_dataset.map(
+            self._load_and_preprocess_image,
+            num_parallel_calls=tf.data.AUTOTUNE
+        ).shuffle(buffer_size=2000)
+        train_dataset = train_dataset.batch(64).prefetch(tf.data.AUTOTUNE)
+        
+        return val_dataset, train_dataset
     
     def _print_dataset_stats(self):
         """Print dataset statistics"""
@@ -85,93 +154,3 @@ class DeepFashionDataset:
         print("\nImages per category:")
         for cat, count in category_counts.items():
             print(f"{cat}: {count}")
-    
-    def _load_and_preprocess_image(self, image_path):
-        """Load and preprocess image for ResNet50"""
-        try:
-            # Read image file
-            img = tf.io.read_file(image_path)
-            # Decode image
-            img = tf.image.decode_image(img, channels=3, expand_animations=False)
-            # Convert to float32
-            img = tf.cast(img, tf.float32)
-            # Resize with padding to maintain aspect ratio
-            img = tf.image.resize_with_pad(img, self.image_size[0], self.image_size[1])
-            # Preprocess for ResNet50
-            img = preprocess_input(img)
-            
-            return img
-            
-        except Exception as e:
-            print(f"Error processing image {image_path}: {e}")
-            return None
-    
-    def _apply_augmentation(self, image):
-        """Apply augmentation during training"""
-        if self.is_training:
-            # Random flip
-            image = tf.image.random_flip_left_right(image)
-            
-            # Random brightness (adjusted for ResNet preprocessed images)
-            image = tf.image.random_brightness(image, 0.2)
-            
-            # Random contrast (adjusted for ResNet preprocessed images)
-            image = tf.image.random_contrast(image, 0.8, 1.2)
-            
-            # Random rotation
-            image = tf.image.rot90(image, k=tf.random.uniform(shape=[], minval=0, maxval=4, dtype=tf.int32))
-            
-        return image
-    
-    def get_batch(self, batch_size):
-        """Get a batch of images and labels"""
-        images = []
-        labels = np.zeros((batch_size, self.num_classes))
-        
-        while len(images) < batch_size:
-            ann = random.choice(self.annotations['annotations'])
-            img_path = os.path.join('datasets/deepfashion/images', ann['file_name'])
-            
-            # Load and preprocess image
-            img = self._load_and_preprocess_image(img_path)
-            if img is None:
-                continue
-                
-            # Apply augmentation
-            img = self._apply_augmentation(img)
-            
-            # Get label
-            category = ann['category_name']
-            label_idx = self.category_to_idx[category]
-            
-            images.append(img)
-            labels[len(images)-1, label_idx] = 1
-            
-        return np.array(images), labels
-    
-    def get_validation_data(self, validation_split=0.2):
-        """Create validation dataset"""
-        # Temporarily disable training augmentations
-        self.is_training = False
-        
-        # Randomly select validation samples
-        total_samples = len(self.annotations['annotations'])
-        val_size = int(total_samples * validation_split)
-        val_indices = random.sample(range(total_samples), val_size)
-        
-        val_images = []
-        val_labels = np.zeros((val_size, self.num_classes))
-        
-        for idx, i in enumerate(val_indices):
-            ann = self.annotations['annotations'][i]
-            img_path = os.path.join('datasets/deepfashion/images', ann['file_name'])
-            
-            # Load and preprocess image
-            img = self._load_and_preprocess_image(img_path)
-            if img is not None:
-                val_images.append(img)
-                label_idx = self.category_to_idx[ann['category_name']]
-                val_labels[idx, label_idx] = 1
-        
-        self.is_training = True
-        return np.array(val_images), val_labels
