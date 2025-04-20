@@ -87,19 +87,13 @@ The system uses the DeepFashion dataset with:
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
 ## 🔗 Links
 
 - [Live Demo](https://fashionfusion.streamlit.app/)
-- [Documentation](docs/README.md)
-- [Issue Tracker](https://github.com/yourusername/FashionFusion/issues)
 
 ## 👥 Authors
 
-- Your Name - Initial work - [YourGithub](https://github.com/yourusername)
+- Chloy Costa - Initial work - [Chloy02](https://github.com/Chloy02)
 
 ## 🙏 Acknowledgments
 
