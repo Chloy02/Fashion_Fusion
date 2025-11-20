@@ -5,6 +5,10 @@ import numpy as np
 from transformers import CLIPProcessor, CLIPModel
 import google.generativeai as genai
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # Set up the Streamlit page config
 st.set_page_config(page_title="FashionFusion", layout="wide", page_icon="👗")
@@ -85,9 +89,9 @@ def main():
     # Sidebar for Settings
     with st.sidebar:
         st.header("Settings")
-        # Pre-fill with the user's provided key for convenience
-        default_key = "AIzaSyD_phCe9BCP1LS3gvXbz6glEfvyHq7-920"
-        api_key = st.text_input("Google Gemini API Key", value=default_key, type="password", help="Required for AI suggestions")
+        # Load key from environment variable, but allow user override
+        env_key = os.getenv("GOOGLE_API_KEY", "")
+        api_key = st.text_input("Google Gemini API Key", value=env_key, type="password", help="Required for AI suggestions")
         
         st.divider()
         
