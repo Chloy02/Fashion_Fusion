@@ -89,9 +89,13 @@ def main():
     # Sidebar for Settings
     with st.sidebar:
         st.header("Settings")
-        # Load key from environment variable, but allow user override
-        env_key = os.getenv("GOOGLE_API_KEY", "")
-        api_key = st.text_input("Google Gemini API Key", value=env_key, type="password", help="Required for AI suggestions")
+        
+        # Check if API key is set in environment
+        api_key = os.getenv("GOOGLE_API_KEY")
+        if not api_key:
+            st.error("⚠️ API Key missing! Please add GOOGLE_API_KEY to your .env file.")
+        else:
+            st.success("✅ API Key loaded securely")
         
         st.divider()
         
